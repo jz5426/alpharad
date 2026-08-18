@@ -11,7 +11,7 @@
 <meta property="og:title" content="AlphaRad — Grounded Zero-Shot Classification in Chest Radiology">
 <meta property="og:description" content="State-of-the-art zero-shot classification across 16 chest-radiology benchmarks, with best-in-class grounding, phrase grounding and segmentation.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="assets/fig03-similarity-maps.pdf">
+<meta property="og:image" content="assets/fig03-similarity-maps.png">
 <meta name="twitter:card" content="summary_large_image">
 
 <script>
@@ -586,7 +586,7 @@ tr.rule td,tr.rule th{border-bottom:1px solid var(--edge-2)}
   <h3 class="sub">Architecture</h3>
   <div class="figgrid">
     <figure class="figure" style="margin:0">
-      <img src="assets/fig01-fusion-modules.pdf" alt="Comparison of cross-modal fusion modules in medical vision-language models: CLIP-style, SCSA, multi-head cross-attention, and FLaS.">
+      <img src="assets/fig01-fusion-modules.png" alt="Comparison of cross-modal fusion modules in medical vision-language models: CLIP-style, SCSA, multi-head cross-attention, and FLaS.">
       <figcaption class="figcap">
         <b>Figure 1</b> — Types of cross-modal fusion in medical VLPMs. FLaS introduces no parameter overhead
         relative to SCSA or multi-head cross-attention. K is the number of image embeddings, D the feature
@@ -594,7 +594,7 @@ tr.rule td,tr.rule th{border-bottom:1px solid var(--edge-2)}
       </figcaption>
     </figure>
     <figure class="figure" style="margin:0">
-      <img src="assets/fig02-framework.pdf" alt="Overall AlphaRad training framework showing image and text encoders, the sampled medical concept set, FLaS, and the combined objective.">
+      <img src="assets/fig02-framework.png" alt="Overall AlphaRad training framework showing image and text encoders, the sampled medical concept set, FLaS, and the combined objective.">
       <figcaption class="figcap">
         <b>Figure 2</b> — The AlphaRad training framework. Q is the shared set of medical concepts sampled for
         the batch; each image carries its own positives and sampled negatives.
@@ -668,7 +668,7 @@ tr.rule td,tr.rule th{border-bottom:1px solid var(--edge-2)}
 
   <h3 class="sub">Inside the subspaces</h3>
   <figure class="figure" style="margin:0">
-    <img src="assets/fig05-factorized-subspaces.pdf" alt="Attention maps from each of the eight factorized subspaces alongside their average, for three example findings." loading="lazy">
+    <img src="assets/fig05-factorized-subspaces.png" alt="Attention maps from each of the eight factorized subspaces alongside their average, for three example findings." loading="lazy">
     <figcaption class="figcap">
       <b>Figure 5</b> — The eight factorized subspaces in FLaS, shown against the averaged map. Pleural
       effusion draws seven subspaces to one location while a single subspace finds the second box; pulmonary
