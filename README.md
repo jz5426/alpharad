@@ -30,16 +30,16 @@ Export the figure, overwrite the file, keep the name. Nothing else to change.
 
 | File | Figure | Where it appears |
 |---|---|---|
-| `fig03-similarity-maps.png` | 3 — similarity maps on ChestXDet10 | Hero, under the title |
-| `fig01-fusion-modules.png` | 1 — types of cross-modal fusion | Method → Architecture |
-| `fig02-framework.png` | 2 — overall training framework | Method → Architecture |
-| `fig13-grounding-success.png` | 13 — grounding, success cases | Qualitative |
-| `fig14-grounding-failure.png` | 14 — grounding, failure cases | Qualitative |
-| `fig15-segmentation-chexlocalize-a.png` | 15 — CheXlocalize, classes 1–5 | Qualitative |
-| `fig16-segmentation-chexlocalize-b.png` | 16 — CheXlocalize, classes 6–10 | Qualitative |
-| `fig06-segmentation-siim.png` | 6 — SIIM-ACR pneumothorax | Qualitative |
-| `fig07-segmentation-qata.png` | 7 — QaTa-COV19 | Qualitative |
-| `fig05-factorized-subspaces.png` | 5 — the eight FLaS subspaces | Qualitative |
+| `fig03-similarity-maps.pdf` | 3 — similarity maps on ChestXDet10 | Hero, under the title |
+| `fig01-fusion-modules.pdf` | 1 — types of cross-modal fusion | Method → Architecture |
+| `fig02-framework.pdf` | 2 — overall training framework | Method → Architecture |
+| `fig13-grounding-success.jpeg` | 13 — grounding, success cases | Qualitative |
+| `fig14-grounding-failure.jpeg` | 14 — grounding, failure cases | Qualitative |
+| `fig15-segmentation-chexlocalize-a.jpeg` | 15 — CheXlocalize, classes 1–5 | Qualitative |
+| `fig16-segmentation-chexlocalize-b.jpeg` | 16 — CheXlocalize, classes 6–10 | Qualitative |
+| `fig06-segmentation-siim.jpeg` | 6 — SIIM-ACR pneumothorax | Qualitative |
+| `fig07-segmentation-qata.jpeg` | 7 — QaTa-COV19 | Qualitative |
+| `fig05-factorized-subspaces.pdf` | 5 — the eight FLaS subspaces | Qualitative |
 
 Notes:
 
