@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlphaRad — Grounded Zero-Shot Classification in Chest Radiology</title>
+<meta name="description" content="AlphaRad: a medical vision-language pretrained model for grounded zero-shot chest radiology, trained with alpha-Corrected Binary Cross Entropy over an LLM-parsed medical concept space and Factorized Latent Supervision (FLaS).">
+<meta name="theme-color" content="#000C1F">
+
+<!-- ── Social preview. Use an absolute URL once the page is live. ───────── -->
+<meta property="og:title" content="AlphaRad — Grounded Zero-Shot Classification in Chest Radiology">
+<meta property="og:description" content="State-of-the-art zero-shot classification across 16 chest-radiology benchmarks, with best-in-class grounding, phrase grounding and segmentation.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="assets/fig03-similarity-maps.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<script>
+/* Resolve the theme before first paint so the page never flashes the wrong one. */
+(function(){
+  var t = null;
+  try { t = localStorage.getItem('alpharad-theme'); } catch (e) {}
+  if (t !== 'light' && t !== 'dark') {
+    t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  document.documentElement.dataset.theme = t;
+})();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Two separate requests on purpose: if one family ever 404s, the others still load. -->
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   Tokens. U of T Blue (#002A5C) is the panel surface in dark and the
+   type colour in light. The three signal colours are lifted from the
+   paper's figure legend and never used for anything else:
+   green = radiologist ground truth, cyan = prediction, gold = peak.
+   Each has an -ink variant for when the signal appears as type.
+   ═══════════════════════════════════════════════════════════════════ */
+:root{
+  color-scheme:dark;
+  --film:#000C1F;
+  --film-2:#001430;
+  --panel:#002A5C;
+  --panel-2:#0A3D77;
+  --edge:#0F3E73;
+  --edge-2:#2160A0;
+
+  --bone:#EAF2FA;
+  --tissue:#9DB8D4;
+  --faint:#7C9CC0;
+  --on-bone:#000C1F;
+
+  --gt:#3EDC8A;
+  --pred:#4FD4F2;
+  --peak:#FFC845;
+  --gt-ink:#3EDC8A;
+  --pred-ink:#4FD4F2;
+  --peak-ink:#FFC845;
+  --on-peak:#00193A;
+
+  --shadow:#00060F;
+
+  --display:'Big Shoulders Display',Impact,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --body:'Newsreader',Georgia,serif;
+
+  --gutter:clamp(1.15rem,4vw,3.5rem);
+  --maxw:1180px;
+}
+
+:root[data-theme="light"]{
+  color-scheme:light;
+  --film:#F2F6FA;
+  --film-2:#E7EEF7;
+  --panel:#FFFFFF;
+  --panel-2:#EDF3FA;
+  --edge:#D5E0EC;
+  --edge-2:#AFC4DA;
+
+  --bone:#002A5C;
+  --tissue:#3F607F;
+  --faint:#6B87A5;
+  --on-bone:#FFFFFF;
+
+  --gt-ink:#0E7A46;
+  --pred-ink:#0A6E8C;
+  --peak-ink:#8A6100;
+
+  --shadow:#C9D8E7;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{transition-duration:.001ms!important}
+}
+body{
+  margin:0;
+  background:var(--film);
+  color:var(--bone);
+  font-family:var(--body);
+  font-size:clamp(1rem,.45vw + .92rem,1.115rem);
+  line-height:1.68;
+  font-weight:300;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+img{max-width:100%;display:block}
+a{color:inherit}
+::selection{background:var(--peak);color:var(--on-peak)}
+:focus-visible{outline:2px solid var(--peak-ink);outline-offset:3px;border-radius:2px}
+
+.wrap{width:100%;max-width:var(--maxw);margin-inline:auto;padding-inline:var(--gutter)}
+section[id]{scroll-margin-top:66px}
+
+.eyebrow{font-family:var(--mono);font-weight:500;letter-spacing:.2em;text-transform:uppercase;font-size:.66rem;color:var(--faint)}
+
+/* ── Nav ──────────────────────────────────────────────────────────── */
+.topbar{
+  position:sticky;top:0;z-index:60;
+  background:color-mix(in srgb,var(--film) 88%,transparent);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--edge);
+}
+.topbar__in{display:flex;align-items:center;gap:1.5rem;height:52px}
+.topbar__mark{font-family:var(--mono);font-weight:600;letter-spacing:.18em;font-size:.72rem;text-transform:uppercase;text-decoration:none;white-space:nowrap}
+.topbar__mark span{color:var(--peak-ink)}
+.topbar__right{margin-left:auto;display:flex;align-items:center;gap:1.4rem}
+.topbar__nav{display:flex;gap:1.4rem}
+.topbar__nav a{
+  font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--tissue);text-decoration:none;transition:color .18s;
+}
+.topbar__nav a:hover{color:var(--bone)}
+.themebtn{
+  appearance:none;cursor:pointer;
+  display:inline-flex;align-items:center;gap:.45rem;
+  padding:.34rem .6rem;
+  background:transparent;border:1px solid var(--edge-2);color:var(--tissue);
+  font-family:var(--mono);font-size:.62rem;letter-spacing:.13em;text-transform:uppercase;font-weight:500;
+  transition:color .18s,border-color .18s,background .18s;
+}
+.themebtn:hover{color:var(--bone);border-color:var(--tissue);background:var(--panel)}
+.themebtn svg{width:13px;height:13px;flex:none}
+.themebtn__label{min-width:3.1em;text-align:left}
+:root[data-theme="dark"] .themebtn__sun{display:none}
+:root[data-theme="light"] .themebtn__moon{display:none}
+@media (max-width:760px){
+  .topbar__nav{display:none}
+  .themebtn__label{display:none}
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────── */
+.hero{padding-top:clamp(2.6rem,7vw,5rem);padding-bottom:clamp(1.5rem,3vw,2.5rem)}
+.hero__title{
+  font-family:var(--display);
+  font-weight:800;
+  font-size:clamp(4.2rem,17vw,12rem);
+  max-width:100%;
+  line-height:.78;
+  letter-spacing:-.005em;
+  text-transform:uppercase;
+  margin:.55rem 0 0;
+}
+.hero__title em{font-style:normal;color:var(--peak-ink)}
+.hero__sub{
+  font-family:var(--body);
+  font-weight:300;
+  font-size:clamp(1.15rem,2.3vw,1.72rem);
+  line-height:1.35;
+  max-width:30ch;
+  margin:1.35rem 0 0;
+  text-wrap:balance;
+}
+.hero__sub b{font-weight:500;color:var(--peak-ink);font-style:italic}
+
+.authors{margin:2.1rem 0 0;font-size:1.02rem;line-height:1.75;max-width:62ch}
+.authors a{text-decoration:none;border-bottom:1px solid var(--edge-2);transition:border-color .18s}
+.authors a:hover{border-color:var(--peak-ink)}
+.authors span{border-bottom:1px solid var(--edge)}
+.authors sup{font-family:var(--mono);font-size:.6rem;color:var(--peak-ink);letter-spacing:0}
+.affil{margin:.9rem 0 0;font-family:var(--mono);font-size:.68rem;line-height:1.95;color:var(--faint);max-width:66ch}
+.affil sup{color:var(--tissue)}
+.affil .note{display:block;margin-top:.5rem}
+
+.actions{display:flex;flex-wrap:wrap;gap:.55rem;margin:1.9rem 0 0}
+.btn{
+  display:inline-flex;align-items:center;gap:.5rem;
+  padding:.62rem 1.05rem;
+  border:1px solid var(--edge-2);
+  background:var(--panel);
+  color:var(--bone);
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;font-weight:500;
+  text-decoration:none;
+  transition:background .18s,border-color .18s,color .18s;
+}
+.btn:hover{background:var(--panel-2);border-color:var(--tissue)}
+.btn--key{background:var(--peak);border-color:var(--peak);color:var(--on-peak);font-weight:600}
+.btn--key:hover{background:#FFD87A;border-color:#FFD87A;color:var(--on-peak)}
+.btn svg{width:13px;height:13px;flex:none}
+
+/* ── Section scaffolding ──────────────────────────────────────────── */
+.band{padding-block:clamp(3.2rem,7vw,6rem);border-top:1px solid var(--edge)}
+.band--flush{border-top:none}
+.band__head{display:flex;align-items:baseline;gap:1rem;margin-bottom:clamp(1.4rem,3vw,2.2rem)}
+.band__head .eyebrow{flex:none}
+.band__rule{flex:1;height:1px;background:var(--edge-2);transform:translateY(-3px)}
+.band__meta{font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);flex:none}
+.band h2{
+  font-family:var(--display);font-weight:700;text-transform:uppercase;
+  font-size:clamp(2.4rem,6vw,4.1rem);line-height:.92;
+  margin:0 0 .5rem;
+}
+.band h3.sub{
+  font-family:var(--display);font-weight:700;text-transform:uppercase;
+  font-size:clamp(1.5rem,3vw,2.1rem);line-height:1;
+  margin:clamp(2.4rem,5vw,3.6rem) 0 .6rem;
+}
+.band .lede{color:var(--tissue);max-width:64ch;margin:0 0 1.4rem}
+
+/* ── Figures ──────────────────────────────────────────────────────── */
+.figure{background:var(--panel);border:1px solid var(--edge-2);padding:clamp(.7rem,1.6vw,1.1rem)}
+.figure > img{width:100%;height:auto;background:var(--shadow)}
+.figcap{
+  font-family:var(--mono);font-size:.63rem;letter-spacing:.05em;
+  color:var(--faint);margin:.85rem 0 0;line-height:1.85;
+}
+.figcap b{color:var(--tissue);font-weight:500;letter-spacing:.12em;text-transform:uppercase}
+.figgrid{display:grid;gap:clamp(.9rem,2vw,1.4rem);grid-template-columns:1fr;margin-bottom:clamp(.9rem,2vw,1.4rem)}
+@media (min-width:900px){.figgrid{grid-template-columns:1fr 1fr}}
+
+.legend{
+  display:flex;flex-wrap:wrap;gap:1.15rem;margin:0 0 1.4rem;
+  font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+}
+.legend span{display:inline-flex;align-items:center;gap:.42rem}
+.swatch{width:9px;height:9px;flex:none;box-shadow:0 0 0 1px color-mix(in srgb,var(--bone) 28%,transparent)}
+.swatch--gt{border:1.5px solid var(--gt);box-shadow:none}
+.swatch--gtfill{background:var(--gt)}
+.swatch--pred{background:var(--pred)}
+.swatch--peak{background:var(--peak);border-radius:50%}
+.swatch--miss{background:var(--pred);border-radius:50%}
+
+/* ── Prose ────────────────────────────────────────────────────────── */
+.prose{max-width:66ch}
+.prose p{margin:0 0 1.15rem}
+.prose p:last-child{margin-bottom:0}
+.abstract{font-size:clamp(1.06rem,.5vw + .96rem,1.24rem);line-height:1.72}
+.pull{
+  border-left:2px solid var(--peak-ink);
+  padding:.15rem 0 .15rem 1.15rem;
+  margin:0 0 2rem;
+  font-family:var(--mono);font-size:.83rem;line-height:1.85;color:var(--tissue);
+}
+.pull b{color:var(--bone);font-weight:600}
+
+/* ── Two-contribution grid ────────────────────────────────────────── */
+.contrib{display:grid;gap:1px;background:var(--edge);border:1px solid var(--edge);grid-template-columns:1fr}
+@media (min-width:900px){.contrib{grid-template-columns:1fr 1fr}}
+.contrib > article{background:var(--panel);padding:clamp(1.25rem,2.6vw,2.1rem)}
+.contrib h3 .lc{text-transform:none}
+.contrib h3{
+  font-family:var(--display);font-weight:700;text-transform:uppercase;
+  font-size:clamp(1.6rem,3vw,2.25rem);line-height:1;margin:.55rem 0 .2rem;
+}
+.contrib .tagline{font-family:var(--mono);font-size:.63rem;letter-spacing:.13em;text-transform:uppercase;color:var(--peak-ink);margin:0 0 1.1rem}
+.contrib p{font-size:.99rem;line-height:1.68;color:var(--tissue);margin:0 0 1rem}
+.contrib p strong{color:var(--bone);font-weight:500}
+
+.eq{
+  background:var(--film-2);border:1px solid var(--edge);
+  padding:1rem .8rem;margin:0 0 1rem;
+  overflow-x:auto;text-align:center;font-size:.95rem;
+}
+.eq .katex{color:var(--bone)}
+.eq-fb{font-family:var(--mono);font-size:.82rem;color:var(--bone)}
+.eq-note{font-family:var(--mono);font-size:.6rem;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);margin:.55rem 0 0;text-align:center;line-height:1.7}
+.eq-note--prose{text-transform:none;letter-spacing:.01em;font-size:.72rem;color:var(--tissue);line-height:1.75}
+
+/* ── FLaS schematic ───────────────────────────────────────────────── */
+.flas-fig{margin:0 0 1.15rem}
+.flas-fig svg{width:100%;height:auto;display:block;overflow:visible}
+.flas-band{fill:var(--edge-2)}
+.flas-sub{fill:var(--panel-2);stroke:var(--edge-2);stroke-width:1}
+.flas-cell{fill:var(--pred-ink)}
+.flas-label{font-family:var(--mono);font-size:7px;letter-spacing:.09em;fill:var(--faint);text-transform:uppercase}
+.flas-label--key{fill:var(--peak-ink)}
+
+/* ── Head-spread dot plot ─────────────────────────────────────────── */
+.spread-row{margin:0 0 1.05rem}
+.spread-row:last-child{margin-bottom:0}
+.spread-top{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:.6rem;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);margin-bottom:.4rem}
+.spread-top b{color:var(--tissue);font-weight:500}
+.spread-track{position:relative;height:26px;border-left:1px solid var(--edge-2);border-right:1px solid var(--edge-2)}
+.spread-track::before{content:"";position:absolute;left:0;right:0;top:13px;height:1px;background:var(--edge)}
+.spread-track i{position:absolute;top:9px;width:8px;height:8px;border-radius:50%;background:var(--tissue);transform:translateX(-4px);opacity:.75}
+.spread-track i.fused{background:var(--peak-ink);width:11px;height:11px;top:7.5px;transform:translateX(-5.5px);opacity:1;box-shadow:0 0 0 3px color-mix(in srgb,var(--peak-ink) 18%,transparent)}
+.spread-scale{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;color:var(--faint);margin-top:.25rem}
+
+/* ── Tables ───────────────────────────────────────────────────────── */
+.tablewrap{
+  overflow-x:auto;border:1px solid var(--edge-2);background:var(--panel);
+  scrollbar-width:thin;scrollbar-color:var(--edge-2) var(--panel);
+}
+.tablewrap::-webkit-scrollbar{height:9px}
+.tablewrap::-webkit-scrollbar-thumb{background:var(--edge-2)}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:.7rem;white-space:nowrap}
+caption{
+  caption-side:top;text-align:left;padding:.85rem 1rem;
+  font-family:var(--mono);font-size:.62rem;letter-spacing:.11em;text-transform:uppercase;color:var(--faint);
+  border-bottom:1px solid var(--edge);
+}
+caption b{color:var(--tissue);font-weight:500}
+th,td{padding:.42rem .5rem;text-align:right;border-bottom:1px solid var(--edge)}
+thead th{
+  color:var(--faint);font-weight:500;letter-spacing:.08em;font-size:.6rem;
+  background:var(--panel-2);border-bottom:1px solid var(--edge-2);
+}
+tbody th{
+  text-align:left;font-weight:400;color:var(--tissue);
+  position:sticky;left:0;background:var(--panel);z-index:1;
+  border-right:1px solid var(--edge);padding-right:1rem;
+}
+thead th:first-child{text-align:left}
+tbody tr:hover th,tbody tr:hover td{background:var(--panel-2)}
+td.best{color:var(--peak-ink);font-weight:600}
+td.avg,th.avg{border-left:1px solid var(--edge-2);color:var(--bone)}
+tr.ours th{color:var(--bone);font-weight:500}
+tr.ours th::before{content:"▸ ";color:var(--peak-ink)}
+tr.rule td,tr.rule th{border-bottom:1px solid var(--edge-2)}
+.tnote{font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;color:var(--faint);margin:.7rem 0 0;line-height:1.9}
+
+/* ── BibTeX ───────────────────────────────────────────────────────── */
+.bib{position:relative;background:var(--film-2);border:1px solid var(--edge-2);padding:1.15rem 1.25rem;overflow-x:auto}
+.bib pre{margin:0;font-family:var(--mono);font-size:.72rem;line-height:1.75;color:var(--tissue);white-space:pre}
+.bib .k{color:var(--pred-ink)}
+.copy{
+  position:absolute;top:.7rem;right:.7rem;
+  appearance:none;cursor:pointer;background:var(--panel);border:1px solid var(--edge-2);color:var(--tissue);
+  font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;padding:.34rem .6rem;
+  transition:color .16s,border-color .16s;
+}
+.copy:hover{color:var(--bone);border-color:var(--tissue)}
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+.foot{border-top:1px solid var(--edge);padding-block:2.4rem 3.2rem;color:var(--faint)}
+.foot p{font-family:var(--mono);font-size:.63rem;letter-spacing:.06em;line-height:1.95;margin:0 0 .7rem}
+.foot a{color:var(--tissue)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar__in">
+    <a class="topbar__mark" href="#top">Alpha<span>Rad</span></a>
+    <div class="topbar__right">
+      <nav class="topbar__nav" aria-label="Sections">
+        <a href="#abstract">Abstract</a>
+        <a href="#method">Method</a>
+        <a href="#qualitative">Qualitative</a>
+        <a href="#results">Results</a>
+        <a href="#cite">Cite</a>
+      </nav>
+      <button class="themebtn" type="button" id="theme-toggle" aria-pressed="false">
+        <svg class="themebtn__sun" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <circle cx="10" cy="10" r="3.6"/>
+          <path d="M10 1.6v2.2M10 16.2v2.2M18.4 10h-2.2M3.8 10H1.6M15.9 4.1l-1.6 1.6M5.7 14.3l-1.6 1.6M15.9 15.9l-1.6-1.6M5.7 5.7 4.1 4.1"/>
+        </svg>
+        <svg class="themebtn__moon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M16.2 12.4A6.9 6.9 0 0 1 7.6 3.8a6.9 6.9 0 1 0 8.6 8.6z"/>
+        </svg>
+        <span class="themebtn__label">Dark</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ══════════════════ HERO ══════════════════ -->
+<section class="wrap hero">
+  <p class="eyebrow">Preprint &nbsp;·&nbsp; Vision–language pretraining &nbsp;·&nbsp; Chest radiography</p>
+
+  <h1 class="hero__title">Alpha<em>Rad</em></h1>
+
+  <p class="hero__sub">
+    Zero-shot chest radiology that says <b>what</b> it sees and points to <b>where</b> it sees it —
+    trained on 215,698 LLM-parsed clinical concepts, with a fusion module that adds no parameters at all.
+  </p>
+
+  <!-- To link an author, swap the <span> for <a href="https://their-site">…</a> -->
+  <p class="authors">
+    <span>Jianzhong You</span><sup>1,3,5,7</sup>,
+    <span>Yuan Gao</span><sup>1,2,3,5,7</sup>,
+    <span>Chris McIntosh</span><sup>1,2,3,4,5,6,7</sup>
+  </p>
+
+  <p class="affil">
+    <sup>1</sup>Peter Munk Cardiac Centre, University Health Network &nbsp;·&nbsp;
+    <sup>2</sup>Toronto General Hospital Research Institute, UHN &nbsp;·&nbsp;
+    <sup>3</sup>Ted Rogers Centre for Heart Research &nbsp;·&nbsp;
+    <sup>4</sup>Dept. of Computer Science, University of Toronto &nbsp;·&nbsp;
+    <sup>5</sup>Dept. of Medical Biophysics, U of T &nbsp;·&nbsp;
+    <sup>6</sup>Dept. of Medical Imaging, U of T &nbsp;·&nbsp;
+    <sup>7</sup>Vector Institute
+    <span class="note">Work completed during Ph.D. studies at the University of Toronto.</span>
+  </p>
+
+  <!-- ── Replace the four href="#" values below with your real links ── -->
+  <div class="actions">
+    <a class="btn btn--key" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M3 1.5h6l4 4v9H3z"/><path d="M9 1.5v4h4"/></svg>
+      Paper
+    </a>
+    <a class="btn" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M5.5 11 2 7.5 5.5 4M10.5 4 14 7.5 10.5 11"/></svg>
+      Code
+    </a>
+    <a class="btn" href="#">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2" y="3" width="12" height="10"/><path d="M2 6h12"/></svg>
+      Checkpoints
+    </a>
+    <a class="btn" href="#cite">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M6 4c-2 1-3 2.5-3 5v3h4V8H5c0-1.5.4-2.6 1-3.2zM13 4c-2 1-3 2.5-3 5v3h4V8h-2c0-1.5.4-2.6 1-3.2z"/></svg>
+      BibTeX
+    </a>
+  </div>
+</section>
+
+<!-- ══════════════════ HERO FIGURE ══════════════════ -->
+<section class="wrap band band--flush">
+  <div class="band__head">
+    <span class="eyebrow">Grounded prediction</span>
+    <span class="band__rule"></span>
+    <span class="band__meta">ChestXDet10 · AlphaRad-224</span>
+  </div>
+
+  <div class="legend">
+    <span><i class="swatch swatch--gt"></i>Radiologist box</span>
+    <span><i class="swatch swatch--peak"></i>Attention peak — inside</span>
+    <span><i class="swatch swatch--miss"></i>Attention peak — outside</span>
+    <span>Randomly sampled, not cherry-picked</span>
+  </div>
+
+  <figure class="figure" style="margin:0">
+    <img src="assets/fig03-similarity-maps.png" alt="Similarity maps produced by FLaS on ChestXDet10 positive cases, each with a marker at the pixel of highest attention.">
+    <figcaption class="figcap">
+      <b>Figure 3</b> — Similarity maps derived from FLaS on ChestXDet10 positive cases. The marker sits at
+      the pixel of highest attention intensity. A prediction counts as correct under the Pointing Game only
+      when that single point falls inside the radiologist's box: no box regressor, no detection head,
+      no fine-tuning.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ══════════════════ ABSTRACT ══════════════════ -->
+<section class="wrap band" id="abstract">
+  <div class="band__head">
+    <span class="eyebrow">Abstract</span>
+    <span class="band__rule"></span>
+    <span class="band__meta">22 test datasets · 26 benchmarks</span>
+  </div>
+
+  <div class="prose">
+    <p class="pull">
+      <b>The short version.</b> Radiology reports contain far more structure than contrastive training
+      usually exploits. AlphaRad turns each report into atomic clinical concepts with an LLM, then trains
+      the model to discriminate a large concept vocabulary rather than to match report-to-image pairs —
+      which removes false negatives caused by batch co-occurrence. A second change, FLaS, splits the joint
+      embedding into disjoint subspaces and supervises each one separately, sharpening localisation
+      <b>without adding a single parameter</b>.
+    </p>
+
+    <p class="abstract">
+      Vision-Language Pretrained Models offer a scalable path to open-vocabulary chest radiology
+      understanding, yet two aspects remain underexplored: how structured clinical semantics extracted from
+      medical reports can reduce in-batch noise during contrastive learning, and how cross-modal fusion can
+      be designed to produce more faithful spatial grounding without added complexity.
+    </p>
+    <p class="abstract">
+      We introduce AlphaRad, addressing these opportunities through two contributions. First, we construct a
+      large-scale structured medical concept space from medical reports parsed by a Large Language Model for
+      training, thereby mitigating in-batch learning noise and removing heuristic pair matching in contrastive
+      learning, and thus naturally positioning AlphaRad as a medical concept discriminator trained via
+      α-Corrected Binary Cross-Entropy. Second, we propose FLaS (Factorized Latent Supervision), an extremely
+      simple yet effective cross-modal feature fusion module that factorizes VLPM representations into
+      independent subspaces, using dedicated alignment supervision to enhance the expressiveness of spatial
+      grounding without introducing additional model parameters.
+    </p>
+    <p class="abstract">
+      Through extensive empirical validation, AlphaRad shows strong zero-shot generalization across diverse
+      chest radiology tasks. Notably, it establishes state-of-the-art average performance across 16
+      classification benchmarks, while achieving individual state-of-the-art results via distinct gains on 7
+      grounding/phrase grounding and 3 segmentation datasets.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════════ METHOD ══════════════════ -->
+<section class="wrap band" id="method">
+  <div class="band__head">
+    <span class="eyebrow">Method</span>
+    <span class="band__rule"></span>
+    <span class="band__meta">Two changes, one objective</span>
+  </div>
+  <h2>What changes,<br>and why it helps</h2>
+  <p class="lede">
+    AlphaRad keeps the standard two-tower setup. Everything below happens in how the supervision is
+    constructed and where the alignment loss is applied.
+  </p>
+
+  <div class="contrib">
+
+    <!-- ── α-BCE ── -->
+    <article>
+      <p class="tagline">Contribution 1 · Supervision</p>
+      <h3><span class="lc">α</span>-Corrected BCE</h3>
+
+      <p>
+        Qwen3-30B-A3B parses every MIMIC-CXR report into atomic findings — a disease, device or abnormality,
+        its polarity, and its anatomical context — yielding a pool of <strong>215,698 unique clinical concepts</strong>.
+        Each study keeps its confirmed findings as positives; everything else in the pool is a negative.
+      </p>
+      <p>
+        That reframes pretraining as concept discrimination instead of pair matching. A study showing pleural
+        effusion is no longer pushed away from the phrase “pleural effusion” just because another image in the
+        batch was assigned it. The catch: two hundred thousand negatives per step is neither computable nor
+        gradient-balanced, so negatives are sampled and the sum is rescaled.
+      </p>
+
+      <div class="eq" data-eq="\widehat{\mathcal{L}}_\alpha(\mathcal{Z}_i^{\mathcal{S}}) \;=\; \sum_{j\in\mathcal{P}_i}\ell^{+}(z_i^j)\;+\;\alpha\!\!\sum_{j\in\mathcal{S}_i}\!\ell^{-}(z_i^j)"><span class="eq-fb">L̂α(Zᵢˢ) = Σ<sub>j∈Pᵢ</sub> ℓ⁺(zᵢʲ) + α Σ<sub>j∈Sᵢ</sub> ℓ⁻(zᵢʲ)</span></div>
+      <div class="eq" data-eq="\mathbb{E}\big[\widehat{\mathcal{L}}_\alpha(\mathcal{Z}_i^{\mathcal{S}})\big]=\mathcal{L}_\beta(\mathcal{Z}_i^{\mathcal{N}}),\qquad \alpha=\tfrac{\beta|\mathcal{N}_i|}{m}"><span class="eq-fb">E[L̂α(Zᵢˢ)] = L<sub>β</sub>(Zᵢᴺ),  α = β·|Nᵢ| / m</span></div>
+      <p class="eq-note">Sampled loss is an unbiased estimator of the full negative-reweighted objective</p>
+
+      <p>
+        The paper draws the parallel to Word2Vec negative sampling, but makes the equivalence explicit: for
+        every reweighting β there is an α that matches it in expectation. In practice α = 1 is enough, and a
+        sweep from 1/512 up to 215698/512 barely moves any metric.
+      </p>
+    </article>
+
+    <!-- ── FLaS ── -->
+    <article>
+      <p class="tagline">Contribution 2 · Fusion</p>
+      <h3>FLaS</h3>
+
+      <div class="flas-fig">
+        <svg viewBox="0 0 340 118" role="img" aria-label="Diagram: a 768-dimensional embedding is split into eight 96-dimensional subspaces, each with its own softmax attention map and its own contrastive loss.">
+          <text class="flas-label" x="0" y="9">Joint latent · D = 768</text>
+          <rect class="flas-band" x="0" y="14" width="340" height="7"></rect>
+          <g id="flas-subs"></g>
+          <text class="flas-label flas-label--key" x="0" y="112">8 × softmax attention · 8 × MP-NCE · 0 new parameters</text>
+        </svg>
+      </div>
+
+      <p>
+        The output embedding is cut into <strong>F disjoint coordinate blocks</strong> of size d = D/F. Each block
+        runs its own scaled cosine-similarity attention over the image patches and receives its own contrastive
+        loss. No projection matrices, no concatenation, no feed-forward network — so unlike multi-head cross-attention,
+        the parameter count is unchanged.
+      </p>
+      <p>
+        Two sources of non-linearity come for free: each softmax sees a different similarity landscape, and each
+        subspace gets a separate gradient. What's given up is cross-subspace mixing — a deliberate trade, since
+        that mixing is what blurs attention maps in transformer decoders.
+      </p>
+
+      <p class="tagline" style="margin-top:1.6rem">Evidence · Table 10 &amp; 11</p>
+      <div id="spread"></div>
+      <p class="eq-note eq-note--prose" style="text-align:left">
+        The eight heads are interchangeable for classification and genuinely different for localisation.
+        Averaging them beats every one individually.
+      </p>
+    </article>
+  </div>
+
+  <div class="eq" style="margin-top:1.6rem" data-eq="\mathcal{L}_{\textsc{AlphaRad}}=\mathcal{L}_{\text{FLaS}}+\sum_{i=1}^{B}\widehat{\mathcal{L}}_\alpha\big(\{\tilde z_i^{\,j}\}_{j\in\mathcal{Q}_i}\big),\qquad \tilde z_i^{\,j}=\tfrac{1}{F}\sum_{h=1}^{F} z_i^{\,jh}"><span class="eq-fb">L<sub>AlphaRad</sub> = L<sub>FLaS</sub> + Σ<sub>i</sub> L̂α({z̃ᵢʲ}),  z̃ᵢʲ = (1/F) Σ<sub>h</sub> zᵢʲʰ</span></div>
+  <p class="eq-note">One objective — per-subspace alignment for dense tasks, averaged logits for coarse ones</p>
+
+  <h3 class="sub">Architecture</h3>
+  <div class="figgrid">
+    <figure class="figure" style="margin:0">
+      <img src="assets/fig01-fusion-modules.png" alt="Comparison of cross-modal fusion modules in medical vision-language models: CLIP-style, SCSA, multi-head cross-attention, and FLaS.">
+      <figcaption class="figcap">
+        <b>Figure 1</b> — Types of cross-modal fusion in medical VLPMs. FLaS introduces no parameter overhead
+        relative to SCSA or multi-head cross-attention. K is the number of image embeddings, D the feature
+        dimension, and D = d × F for F factorized latent spaces.
+      </figcaption>
+    </figure>
+    <figure class="figure" style="margin:0">
+      <img src="assets/fig02-framework.png" alt="Overall AlphaRad training framework showing image and text encoders, the sampled medical concept set, FLaS, and the combined objective.">
+      <figcaption class="figcap">
+        <b>Figure 2</b> — The AlphaRad training framework. Q is the shared set of medical concepts sampled for
+        the batch; each image carries its own positives and sampled negatives.
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ══════════════════ QUALITATIVE ══════════════════ -->
+<section class="wrap band" id="qualitative">
+  <div class="band__head">
+    <span class="eyebrow">Qualitative results</span>
+    <span class="band__rule"></span>
+    <span class="band__meta">Successes and failures</span>
+  </div>
+  <h2>What the model<br>actually points at</h2>
+  <p class="lede">
+    Randomly sampled, five per disease class, successes and failures side by side. All maps come from
+    AlphaRad-224 and nothing here was trained on a localisation label.
+  </p>
+
+  <div class="legend">
+    <span><i class="swatch swatch--gt"></i>Ground-truth box</span>
+    <span><i class="swatch swatch--peak"></i>Peak inside the box</span>
+    <span><i class="swatch swatch--miss"></i>Peak outside the box</span>
+  </div>
+
+  <div class="figgrid">
+    <figure class="figure" style="margin:0">
+      <img src="assets/fig13-grounding-success.png" alt="Grid of ChestXDet10 grounding maps where the attention peak falls inside the ground-truth box." loading="lazy">
+      <figcaption class="figcap"><b>Figure 13</b> — ChestXDet10 grounding, success cases. Five randomly sampled examples for each of the ten classes.</figcaption>
+    </figure>
+    <figure class="figure" style="margin:0">
+      <img src="assets/fig14-grounding-failure.png" alt="Grid of ChestXDet10 grounding maps where the attention peak falls outside the ground-truth box." loading="lazy">
+      <figcaption class="figcap"><b>Figure 14</b> — ChestXDet10 grounding, failure cases. The same sampling, for the cases the model gets wrong.</figcaption>
+    </figure>
+  </div>
+
+  <h3 class="sub">Zero-shot segmentation</h3>
+  <p class="lede">
+    Masks come straight from the factorized attention maps. In each pair the annotation is shown first
+    and the prediction directly below it.
+  </p>
+
+  <div class="legend">
+    <span><i class="swatch swatch--gtfill"></i>Radiologist annotation</span>
+    <span><i class="swatch swatch--pred"></i>AlphaRad prediction</span>
+  </div>
+
+  <div class="figgrid">
+    <figure class="figure" style="margin:0">
+      <img src="assets/fig15-segmentation-chexlocalize-a.png" alt="CheXlocalize segmentation results for the first five pathology classes, ground truth above prediction." loading="lazy">
+      <figcaption class="figcap"><b>Figure 15</b> — CheXlocalize segmentation, classes 1–5: atelectasis, cardiomegaly, consolidation, support devices, edema.</figcaption>
+    </figure>
+    <figure class="figure" style="margin:0">
+      <img src="assets/fig16-segmentation-chexlocalize-b.png" alt="CheXlocalize segmentation results for the remaining five pathology classes, ground truth above prediction." loading="lazy">
+      <figcaption class="figcap"><b>Figure 16</b> — CheXlocalize segmentation, classes 6–10: pleural effusion, enlarged cardiomediastinum, lung lesion, airspace opacity, pneumothorax.</figcaption>
+    </figure>
+  </div>
+
+  <div class="figgrid">
+    <figure class="figure" style="margin:0">
+      <img src="assets/fig06-segmentation-siim.png" alt="SIIM-ACR pneumothorax segmentation, ground truth above prediction." loading="lazy">
+      <figcaption class="figcap"><b>Figure 6</b> — SIIM-ACR pneumothorax, sampled from cases with Dice &gt; 0.</figcaption>
+    </figure>
+    <figure class="figure" style="margin:0">
+      <img src="assets/fig07-segmentation-qata.png" alt="QaTa-COV19 infection segmentation, ground truth above prediction." loading="lazy">
+      <figcaption class="figcap"><b>Figure 7</b> — QaTa-COV19 infection regions, sampled without filtering.</figcaption>
+    </figure>
+  </div>
+
+  <h3 class="sub">Inside the subspaces</h3>
+  <figure class="figure" style="margin:0">
+    <img src="assets/fig05-factorized-subspaces.png" alt="Attention maps from each of the eight factorized subspaces alongside their average, for three example findings." loading="lazy">
+    <figcaption class="figcap">
+      <b>Figure 5</b> — The eight factorized subspaces in FLaS, shown against the averaged map. Pleural
+      effusion draws seven subspaces to one location while a single subspace finds the second box; pulmonary
+      fibrosis has subspaces peaking at different points inside the same annotation; atelectasis shows the
+      failure mode, where wrong subspaces pull the average off target even though three of them locate the box.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ══════════════════ RESULTS ══════════════════ -->
+<section class="wrap band" id="results">
+  <div class="band__head">
+    <span class="eyebrow">Results</span>
+    <span class="band__rule"></span>
+    <span class="band__meta">All numbers zero-shot</span>
+  </div>
+  <h2>Sixteen classification<br>benchmarks</h2>
+  <p class="lede">
+    AUROC across 16 datasets. At 224 × 224, AlphaRad already averages higher than every baseline — including
+    the ones evaluated at 448 and 518.
+  </p>
+
+  <div class="tablewrap">
+    <table id="t-cls">
+      <caption><b>Table 2</b> — Zero-shot classification, AUROC (%). Best per column in gold.</caption>
+    </table>
+  </div>
+  <p class="tnote">
+    † XrayDINOv2 + BioBERT &nbsp;·&nbsp; ‡ XrayDINOv2 + MPNet (RadZero's backbone pairing) &nbsp;·&nbsp;
+    Res. is input resolution. Column keys are listed in the paper's acronym table.
+  </p>
+
+  <h3 class="sub">Grounding and dense prediction</h3>
+  <p class="lede">
+    Pointing Game accuracy for grounding and phrase grounding; Dice for segmentation. AlphaRad takes the best
+    average on all three task families, and at 224 it beats RadZero-518 on CheXlocalize, both MS-CXR versions
+    and PadChest-GR.
+  </p>
+
+  <div class="tablewrap">
+    <table id="t-dense">
+      <caption><b>Table 3</b> — Grounding &amp; phrase grounding (Pointing Game, %), segmentation (Dice, %).</caption>
+    </table>
+  </div>
+
+  <h3 class="sub">Per-disease breakdown</h3>
+  <p class="lede">
+    Where the averages come from. Resolution helps most on small, focal findings: nodules go from 39.0 to 70.1
+    and rib fractures from 27.6 to 51.3 between 224 and 518.
+  </p>
+
+  <div class="tablewrap">
+    <table id="t-cxd">
+      <caption><b>Table 4</b> — Per-disease Pointing Game accuracy (%) on ChestXDet10.</caption>
+    </table>
+  </div>
+
+  <div class="tablewrap" style="margin-top:1.4rem">
+    <table id="t-cxldice">
+      <caption><b>Table 12</b> — Per-disease Dice (%) on CheXlocalize.</caption>
+    </table>
+  </div>
+  <p class="tnote">
+    Disease keys: ATE atelectasis · CAL calcification · CAR cardiomegaly · CON consolidation · DEV support
+    devices · EDE edema · EFF pleural effusion · EMP emphysema · ENC enlarged cardiomediastinum · FIB fibrosis ·
+    FRA rib fracture · LES lung lesion · MAS mass · NOD nodule · OPA lung opacity · PTX pneumothorax.
+    The per-disease VinDr-CXR and CheXlocalize grounding tables are in the paper.
+  </p>
+</section>
+
+<!-- ══════════════════ CITE ══════════════════ -->
+<section class="wrap band" id="cite">
+  <div class="band__head">
+    <span class="eyebrow">Citation</span>
+    <span class="band__rule"></span>
+    <span class="band__meta">BibTeX</span>
+  </div>
+
+  <div class="bib">
+    <button class="copy" type="button" id="copy-bib">Copy</button>
+    <pre id="bibtex">@article{you2026alpharad,
+  <span class="k">title</span>   = {AlphaRad: Grounded Zero-Shot Classification in Chest Radiology
+             via {\alpha}-Corrected Binary Cross Entropy and
+             Factorized Latent Supervision},
+  <span class="k">author</span>  = {You, Jianzhong and Gao, Yuan and McIntosh, Chris},
+  <span class="k">year</span>    = {2026},
+  <span class="k">journal</span> = {arXiv preprint},
+  <span class="k">note</span>    = {Replace with the arXiv identifier once available}
+}</pre>
+  </div>
+
+  <p class="tnote" style="margin-top:1.4rem">
+    <b>Acknowledgments.</b> Jianzhong You is funded by the Ontario Graduate Scholarship-Doctoral.
+    Yuan Gao holds a CIHR Canada Graduate Scholarship-Doctoral. Dr. Chris McIntosh holds the Chair in Medical
+    Imaging at the Joint Department of Medical Imaging at University Health Network and the University of Toronto.
+  </p>
+</section>
+
+</main>
+
+<footer class="wrap foot">
+  <p>
+    All radiographs shown are figures from the paper, drawn from the public datasets ChestXDet10,
+    CheXlocalize, SIIM-ACR and QaTa-COV19, and reproduced here for research communication.
+  </p>
+  <p>Research code and model. Not a medical device, and not for clinical use or diagnosis.</p>
+  <p>© 2026 the authors · Page template free to reuse.</p>
+</footer>
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   Data — every number below is transcribed from the paper's tables.
+   Edit here and the tables plus the best-per-column highlighting
+   both follow.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Table 2 */
+const CLS_COLS = ['CXD','CXP','CX14','CXP5','VCXR','CLT2','CLT3','PAD','CSLV','CDLV','CCOM','RSNA','SIIM','SZX','MONT','COVK'];
+const CLS_ROWS = [
+  ['BiomedCLIP',224,[63.0,64.2,63.9,50.7,71.5,54.9,57.7,51.3,53.9,48.0,57.1,82.1,68.3,79.7,74.6,85.3],64.1],
+  ['MedKLIP',   224,[71.3,81.2,72.6,70.1,75.1,61.0,55.6,62.9,53.3,64.7,57.7,86.9,89.7,49.7,64.5,74.6],68.2],
+  ['CheXzero',  224,[61.9,74.6,65.7,67.5,77.9,66.4,65.7,71.3,63.1,39.9,67.1,85.9,69.5,79.5,88.2,61.5],69.1],
+  ['MAVL',      224,[59.8,83.9,65.6,62.4,79.1,61.8,61.7,69.6,53.9,60.0,61.9,81.0,87.0,83.9,91.3,86.5],71.8],
+  ['MaCo',      224,[65.7,78.7,72.8,67.0,85.1,71.6,67.6,75.6,46.3,64.2,48.6,85.1,84.9,79.8,88.9,80.6],72.7],
+  ['BioViL-T',  448,[70.8,78.4,72.9,55.9,85.2,66.6,58.2,65.5,64.1,65.6,66.2,87.0,77.4,90.0,90.7,71.4],72.8],
+  ['KAD',       224,[73.5,82.2,78.9,78.2,81.5,76.5,66.3,75.0,67.8,59.6,70.5,81.7,88.8,77.5,86.8,84.5],76.8],
+  ['CARZero',   224,[79.6,90.1,81.1,73.2,87.8,79.5,76.4,81.0,56.7,72.6,62.7,74.7,92.4,77.0,81.6,80.6],77.9],
+  ['RadZero',   224,[78.5,83.1,80.7,64.9,86.3,78.1,73.7,84.1,70.1,76.2,74.3,83.9,91.4,92.0,88.8,77.0],80.2],
+  ['RadZero',   518,[78.7,84.2,80.4,66.0,87.5,78.5,75.0,84.1,70.8,76.4,74.3,83.4,92.4,92.1,89.0,84.9],81.1,'rule'],
+  ['AlphaRad †',224,[79.8,89.9,80.0,77.1,92.9,79.2,69.4,86.1,73.0,78.6,75.7,80.8,93.1,93.2,94.1,89.4],83.3,'ours'],
+  ['AlphaRad †',518,[82.4,90.0,81.0,77.0,90.4,80.6,70.6,87.5,70.8,77.2,72.9,82.7,95.7,94.6,95.4,88.7],83.6,'ours'],
+  ['AlphaRad ‡',224,[77.3,88.3,80.0,76.6,91.4,80.5,74.8,85.6,69.8,77.4,72.6,81.0,92.1,95.4,94.8,87.0],82.7,'ours'],
+  ['AlphaRad ‡',518,[80.0,89.2,81.2,77.4,92.3,80.5,71.1,86.6,69.6,76.7,73.3,81.6,95.1,96.3,95.7,86.6],83.3,'ours'],
+];
+
+/* Table 3 */
+const DENSE_COLS = ['CXD','VCXR','CXL','ND21','Avg','MSC1','MSC2','PCGR','Avg','CXL','SIIM','QTCV','Avg'];
+const DENSE_GROUPS = [['Grounding · Pointing Game',5],['Phrase grounding · PG',4],['Segmentation · Dice',4]];
+const DENSE_ROWS = [
+  ['BiomedCLIP',224,[7.5,4.6,7.1,0.7,4.9, 4.2,4.6,6.8,5.2, 21.0,1.9,23.0,15.3]],
+  ['MedKLIP',   224,[48.1,22.1,36.1,6.5,28.2, 26.3,19.4,23.4,23.0, 34.5,4.4,25.4,21.4]],
+  ['MAVL',      224,[27.3,21.0,35.3,5.2,22.2, 10.2,6.5,8.5,8.4, 32.3,3.3,32.9,22.8]],
+  ['BioViL-T',  448,[35.1,16.2,36.2,0.0,21.9, 71.9,51.4,34.1,52.5, 33.1,7.9,38.3,26.4]],
+  ['KAD',       224,[39.1,27.5,41.8,3.8,28.0, 47.3,35.6,35.8,39.6, 41.7,3.6,36.3,27.2]],
+  ['CARZero',   224,[54.3,37.4,54.3,22.4,42.1, 74.9,62.5,70.1,69.2, 39.6,10.0,41.2,30.3]],
+  ['RadZero',   224,[53.7,46.3,62.7,30.8,48.4, 83.2,66.2,71.9,73.8, 50.5,12.1,45.6,36.1]],
+  ['RadZero',   518,[62.2,48.9,65.4,37.7,53.4, 84.4,69.4,72.1,75.3, 50.5,17.1,48.7,38.8],'rule'],
+  ['AlphaRad †',224,[56.0,50.3,66.9,33.2,51.6, 89.2,70.4,74.1,77.9, 54.2,16.2,54.7,41.7],'ours'],
+  ['AlphaRad †',518,[68.6,58.6,63.4,58.5,62.3, 89.8,73.6,75.2,79.5, 52.2,21.7,51.7,41.9],'ours'],
+  ['AlphaRad ‡',224,[55.9,54.2,63.3,34.9,52.1, 87.4,70.4,73.4,77.1, 51.8,19.7,54.8,42.1],'ours'],
+  ['AlphaRad ‡',518,[66.5,53.3,61.6,51.4,58.2, 90.4,71.3,74.1,78.6, 48.0,22.4,48.3,39.6],'ours'],
+];
+
+/* Table 4 — ChestXDet10 */
+const CXD_COLS = ['ATE','CAL','CON','EFF','EMP','FIB','FRA','MAS','NOD','PTX'];
+const CXD_ROWS = [
+  ['BiomedCLIP',224,[2.1,0.0,7.3,3.2,35.9,13.4,3.9,6.7,2.6,0.0]],
+  ['MedKLIP',   224,[62.5,13.2,83.7,67.5,73.4,30.5,22.4,73.3,31.2,22.9]],
+  ['MAVL',      224,[20.8,2.6,52.6,32.9,59.0,32.9,5.3,43.3,9.1,14.3]],
+  ['BioViL-T',  448,[43.8,0.0,63.0,50.4,84.6,39.0,2.6,50.0,0.0,17.1]],
+  ['KAD',       224,[64.6,13.2,69.9,61.8,64.4,24.4,19.9,26.7,31.6,14.3]],
+  ['CARZero',   224,[60.4,18.4,82.4,78.2,84.6,56.1,18.4,70.0,28.6,45.7]],
+  ['RadZero',   224,[60.4,21.1,80.6,81.3,79.5,45.1,19.7,76.7,32.5,40.0]],
+  ['RadZero',   518,[64.6,36.8,82.4,85.7,87.2,58.5,25.0,76.7,50.6,54.3],'rule'],
+  ['AlphaRad †',224,[75.0,13.2,82.4,84.1,64.1,43.9,27.6,73.3,39.0,57.1],'ours'],
+  ['AlphaRad †',518,[85.4,42.1,82.7,87.3,82.1,51.2,51.3,73.3,70.1,60.0],'ours'],
+  ['AlphaRad ‡',224,[70.8,15.8,85.5,80.6,82.1,37.8,26.3,73.3,29.9,57.1],'ours'],
+  ['AlphaRad ‡',518,[81.3,42.1,86.9,84.5,79.5,50.0,46.1,70.0,62.3,62.9],'ours'],
+];
+
+/* Table 12 — CheXlocalize Dice */
+const CXL_COLS = ['ATE','CAR','CON','DEV','EDE','EFF','ENC','LES','OPA','PTX'];
+const CXL_ROWS = [
+  ['BiomedCLIP',224,[21.0,28.1,22.4,13.5,38.4,14.1,34.1,6.9,20.0,11.5]],
+  ['MedKLIP',   224,[37.4,45.5,34.2,25.7,53.1,25.1,54.0,13.9,37.4,18.3]],
+  ['MAVL',      224,[38.2,38.2,34.5,16.2,45.7,19.7,48.3,24.2,37.5,19.7]],
+  ['BioViL-T',  448,[36.9,48.4,35.4,19.1,44.4,31.4,56.4,4.6,25.7,28.5]],
+  ['KAD',       224,[47.4,52.9,44.3,29.6,55.7,33.4,60.6,31.6,35.8,26.2]],
+  ['CARZero',   224,[47.4,41.9,41.5,24.8,52.8,39.5,38.2,46.2,32.1,31.3]],
+  ['RadZero',   224,[55.4,59.4,54.6,39.4,61.4,38.8,66.9,45.2,46.1,38.2]],
+  ['RadZero',   518,[55.9,56.7,53.7,41.9,64.5,39.1,63.8,45.0,47.1,36.9],'rule'],
+  ['AlphaRad †',224,[61.5,60.9,57.9,37.9,64.7,44.6,66.8,53.7,56.9,37.0],'ours'],
+  ['AlphaRad †',518,[59.5,57.4,56.3,43.9,63.7,41.8,51.6,46.5,56.0,45.1],'ours'],
+  ['AlphaRad ‡',224,[58.6,55.4,55.9,39.8,63.8,43.2,58.6,47.1,54.7,41.4],'ours'],
+  ['AlphaRad ‡',518,[55.0,47.8,53.5,34.9,64.3,37.3,46.9,41.8,55.5,43.5],'ours'],
+];
+
+/* Tables 10 & 11 — the eight FLaS heads, plus AlphaRad's fused result. */
+const HEADS = [
+  {label:'Classification · 16-dataset average AUROC', v:[83.17,83.12,83.16,83.15,83.01,83.05,83.13,83.05], fused:83.27, lo:82.8, hi:83.5},
+  {label:'Grounding · VinDr-CXR Pointing Game',       v:[49.6,49.8,46.6,46.5,48.5,49.9,49.3,46.6],         fused:50.3,  lo:46.0, hi:51.0},
+  {label:'Phrase grounding · MS-CXR V1',              v:[89.2,88.0,89.8,89.2,88.6,85.6,88.0,89.2],         fused:89.2,  lo:85.0, hi:90.5},
+];
+
+/* ── Table builder ────────────────────────────────────────────────── */
+function buildTable(id, cols, rows, opts){
+  const t = document.getElementById(id);
+  if(!t) return;
+  opts = opts || {};
+  const hasAvg  = opts.avgIndex !== undefined;   // separate Avg column held outside the array
+  const groups  = opts.groups;
+  const flagAt  = hasAvg ? 4 : 3;                // where 'ours' / 'rule' sits in each row
+
+  const max = cols.map((_, i) => rows.reduce((m, r) => Math.max(m, r[2][i]), -Infinity));
+  const maxAvg = hasAvg ? Math.max(...rows.map(r => r[3])) : null;
+
+  let head = '';
+  if(groups){
+    head += '<tr><th></th><th></th>';
+    groups.forEach(([label, span]) => {
+      head += `<th colspan="${span}" style="text-align:center;letter-spacing:.13em;color:var(--tissue)">${label}</th>`;
+    });
+    head += '</tr>';
+  }
+  head += '<tr><th scope="col">Method</th><th scope="col">Res.</th>';
+  head += cols.map(c => `<th scope="col" class="${c === 'Avg' ? 'avg' : ''}">${c}</th>`).join('');
+  if(hasAvg) head += '<th scope="col" class="avg">Avg</th>';
+  head += '</tr>';
+
+  const body = rows.map(r => {
+    const flag = r[flagAt];
+    const cls  = flag === 'ours' ? 'ours' : flag === 'rule' ? 'rule' : '';
+    let cells = r[2].map((v, i) => {
+      const isAvg = cols[i] === 'Avg';
+      return `<td class="${isAvg ? 'avg' : ''} ${v === max[i] ? 'best' : ''}">${v.toFixed(1)}</td>`;
+    }).join('');
+    if(hasAvg) cells += `<td class="avg ${r[3] === maxAvg ? 'best' : ''}">${r[3].toFixed(1)}</td>`;
+    return `<tr class="${cls}"><th scope="row">${r[0]}</th><td>${r[1]}</td>${cells}</tr>`;
+  }).join('');
+
+  t.insertAdjacentHTML('beforeend', `<thead>${head}</thead><tbody>${body}</tbody>`);
+}
+
+buildTable('t-cls',     CLS_COLS,   CLS_ROWS,   {avgIndex:3});
+buildTable('t-dense',   DENSE_COLS, DENSE_ROWS, {groups:DENSE_GROUPS});
+buildTable('t-cxd',     CXD_COLS,   CXD_ROWS,   {});
+buildTable('t-cxldice', CXL_COLS,   CXL_ROWS,   {});
+
+/* ── FLaS schematic ───────────────────────────────────────────────── */
+(function(){
+  const g = document.getElementById('flas-subs');
+  if(!g) return;
+  const F = 8, W = 340, gap = 4, w = (W - gap * (F - 1)) / F;
+  let out = '';
+  for(let h = 0; h < F; h++){
+    const x = h * (w + gap);
+    out += `<rect class="flas-sub" x="${x.toFixed(1)}" y="34" width="${w.toFixed(1)}" height="46"></rect>`;
+    out += `<line x1="${(x + w/2).toFixed(1)}" y1="21" x2="${(x + w/2).toFixed(1)}" y2="34" stroke="var(--edge-2)" stroke-width="1"></line>`;
+    // 4x4 attention grid, each subspace peaking somewhere different
+    const px = 4, cell = 5, ox = x + w/2 - (px*cell)/2, oy = 40;
+    const pr = (h*7) % px, pc = (h*5 + 2) % px;
+    for(let r = 0; r < px; r++) for(let c = 0; c < px; c++){
+      const a = Math.max(.06, 0.92 - (Math.abs(r-pr) + Math.abs(c-pc)) * 0.26);
+      out += `<rect class="flas-cell" x="${(ox + c*cell).toFixed(1)}" y="${oy + r*cell}" width="${cell-1}" height="${cell-1}" opacity="${a.toFixed(2)}"></rect>`;
+    }
+    out += `<text class="flas-label" x="${(x + w/2).toFixed(1)}" y="92" text-anchor="middle" style="font-size:6px">d=96</text>`;
+  }
+  g.innerHTML = out;
+})();
+
+/* ── Per-head dot plot ────────────────────────────────────────────── */
+(function(){
+  const host = document.getElementById('spread');
+  if(!host) return;
+  host.innerHTML = HEADS.map(r => {
+    const pos = v => ((v - r.lo) / (r.hi - r.lo) * 100).toFixed(2);
+    const dots = r.v.map(v => `<i style="left:${pos(v)}%"></i>`).join('');
+    return `<div class="spread-row">
+      <div class="spread-top"><span>${r.label}</span><b>fused ${r.fused.toFixed(1)}</b></div>
+      <div class="spread-track">${dots}<i class="fused" style="left:${pos(r.fused)}%"></i></div>
+      <div class="spread-scale"><span>${r.lo.toFixed(1)}</span><span>${r.hi.toFixed(1)}</span></div>
+    </div>`;
+  }).join('');
+})();
+
+/* ── Theme toggle ─────────────────────────────────────────────────── */
+(function(){
+  const root = document.documentElement;
+  const btn  = document.getElementById('theme-toggle');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const GROUND = {dark:'#000C1F', light:'#F2F6FA'};
+
+  function paint(theme){
+    root.dataset.theme = theme;
+    btn.querySelector('.themebtn__label').textContent = theme === 'dark' ? 'Dark' : 'Light';
+    btn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+    btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+    if(meta) meta.setAttribute('content', GROUND[theme]);
+  }
+  paint(root.dataset.theme === 'light' ? 'light' : 'dark');
+
+  btn.addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    paint(next);
+    try{ localStorage.setItem('alpharad-theme', next); }catch(e){ /* private mode — session only */ }
+  });
+
+  // Follow the OS only while the visitor hasn't chosen for themselves.
+  if(window.matchMedia){
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => {
+      let saved = null;
+      try{ saved = localStorage.getItem('alpharad-theme'); }catch(err){}
+      if(!saved) paint(e.matches ? 'light' : 'dark');
+    });
+  }
+})();
+
+/* ── BibTeX copy ──────────────────────────────────────────────────── */
+document.getElementById('copy-bib').addEventListener('click', async function(){
+  const txt = document.getElementById('bibtex').innerText;
+  try{
+    await navigator.clipboard.writeText(txt);
+    this.textContent = 'Copied';
+  }catch{
+    this.textContent = 'Select and copy';
+  }
+  setTimeout(() => { this.textContent = 'Copy'; }, 1800);
+});
+
+/* ── KaTeX ────────────────────────────────────────────────────────── */
+window.addEventListener('load', () => {
+  if(!window.katex) return;
+  document.querySelectorAll('.eq[data-eq]').forEach(el => {
+    try{
+      katex.render(el.dataset.eq, el, {displayMode:true, throwOnError:false});
+    }catch(err){ /* the plain-text fallback stays in place */ }
+  });
+});
+</script>
+</body>
+</html>
